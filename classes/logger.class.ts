@@ -28,12 +28,17 @@ export enum Colors {
 
 class Logger {
     name: string;
+    isDebug = false;
     constructor() {
         this.name = "[Makeit]"
     }
 
+    notify(message: string) {
+        console.log(Colors.FgGreen + this.name + Colors.Reset, message, Colors.Reset)
+    }
+
     debug(message: string) {
-        console.log(Colors.FgCyan + this.name + Colors.Reset, message, Colors.Reset)
+        if(this.isDebug) console.log(Colors.FgCyan + this.name + Colors.Reset, message, Colors.Reset)
     }
 
     error(message: string) {

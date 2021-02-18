@@ -16,7 +16,6 @@ export function Column(options: ColumnOptions): Function {
 export function AutoInclude(): Function {
     return async (target: Model<any>, propertyKey: string) => {
         target.columns.find((c: any) => c.name === propertyKey).type.autoInclude = true;
-        console.log(target.columns.find((c: any) => c.name === propertyKey))
     }
 }
 

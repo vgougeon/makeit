@@ -17,7 +17,13 @@ class MakeIt {
     router: any = express.Router()
     middlewares: any[] = []
     public pool: any = null
-    constructor() { }
+    constructor() { 
+        logger.notify("Launching server...")
+    }
+
+    debug() {
+        logger.isDebug = true
+    }
 
     async initDb(options: ServeOptions) {
         this.mysqlConnect(options)
@@ -42,7 +48,7 @@ class MakeIt {
         const port = 3000
 
         await app.listen(port)
-        logger.debug(`ExpressJS: > ${Colors.FgCyan}started on port ${port}`)
+        logger.notify(`ExpressJS > ${Colors.FgCyan}started on port ${port}`)
     }
     async mysqlConnect(options: ServeOptions) {
         logger.debug("MYSQL: connection")
@@ -57,7 +63,7 @@ class MakeIt {
                 queueLimit: 0
             });
             await this.pool.getConnection()
-            logger.debug("MYSQL: pool created !")
+            logger.notify(`MYSQL > ${Colors.FgCyan}connected!`)
         } catch(err) { 
             logger.error(`Couldn't connect to database ${options.database} on ${options.host || 'localhost'}:3306`)
         }
