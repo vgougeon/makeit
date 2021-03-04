@@ -7,6 +7,7 @@ import { populate } from "../operators/populate";
 import MakeitType from "../types/types.class";
 import { logger, Colors } from './logger.class';
 import { validate } from 'class-validator';
+import knex from "knex";
 
 export class Model<T> {
     static columns: any[]
@@ -16,7 +17,7 @@ export class Model<T> {
     class: any;
     tableName: string;
     foreignKeys: Function[] = []
-    constructor() { 
+    constructor() {
         this.columns = this.columns || []
         this.columns = [{ name: 'id', type: new MakeitType.Integer() }, ...this.columns]
     }
@@ -27,54 +28,73 @@ export class Model<T> {
     }
 
     async createTable() {
-        const req = `SHOW TABLES LIKE '${this.tableName}'`
-        const [results] = await Makeit.pool.query(req)
-        if (!results.length) {
-            await logger.debug("MYSQL: > " + Colors.BgBlue + "CREATE TABLE " + this.tableName + "...")
-            await Makeit.pool.query(`
-            CREATE TABLE ${this.tableName}
-            (id INT PRIMARY KEY NOT NULL AUTO_INCREMENT)
-            `)
+        if (!await Makeit.knex.schema.hasTable(this.tableName)) {
+            await Makeit.knex.schema.createTable(this.tableName, (table) => {
+                table.increments()
+            })
         }
-        else {
-            await logger.debug("MYSQL: > table " + this.tableName + " exists...")
-        }
+        // const req = `SHOW TABLES LIKE '${this.tableName}'`
+        // const [results] = await Makeit.pool.query(req)
+        // if (!results.length) {
+        //     await logger.debug("MYSQL: > " + Colors.BgBlue + "CREATE TABLE " + this.tableName + "...")
+        //     await Makeit.pool.query(`
+        //     CREATE TABLE ${this.tableName}
+        //     (id INT PRIMARY KEY NOT NULL AUTO_INCREMENT)
+        //     `)
+        // }
+        // else {
+        //     await logger.debug("MYSQL: > table " + this.tableName + " exists...")
+        // }
     }
 
     async createColumns() {
-        const req = `DESCRIBE ${this.tableName}`
-        const [results] = await Makeit.pool.query(req)
-        const fields = results.map((row: any) => row.Field)
+        // const req = `DESCRIBE ${this.tableName}`
+        // const [results] = await Makeit.pool.query(req)
+        // const fields = results.map((row: any) => row.Field)
+        // let foreignKeys: Function[] = []
+        // for (let column of this.columns) {
+        //     if(column.type.relation === 'belongsToMany') continue;
+        //     if(column.type.relation === 'hasOne') continue;
+        //     if(column.type.relation === 'hasMany') continue;
+
         let foreignKeys: Function[] = []
         for (let column of this.columns) {
-            if(column.type.relation === 'belongsToMany') continue;
-            if(column.type.relation === 'hasOne') continue;
-            if(column.type.relation === 'hasMany') continue;
+            if (column.type.relation === 'belongsToMany') continue;
+            if (column.type.relation === 'hasOne') continue;
+            if (column.type.relation === 'hasMany') continue;
 
-            const def = column.default !== undefined ?
-                column.default.constructor?.name === 'Raw' ?
-                    `DEFAULT ${column.default.value}` :
-                    `DEFAULT '${column.default}'` :
-                ``;
-            if (!fields.includes(column.name)) {
-                const add = `ALTER TABLE ${this.tableName}
-                ADD 
-                ${column.name} 
-                ${column.type.toSQL()} 
-                ${def}`
-                await Makeit.pool.query(add)
-                logger.debug("MYSQL: >   " + Colors.FgCyan + "CREATE ROW " + column.name)
-
-            }
-            else {
-                logger.debug("MYSQL: >   " + Colors.FgGreen + "OK " + column.name)
-            }
-            if (column.type.extra) {
-                foreignKeys.push(
-                    async () => await column.type.extra(this.tableName, column)
-                )
+            if(!await Makeit.knex.schema.hasColumn(this.tableName, column.name)) {
+                await Makeit.knex.schema.alterTable(this.tableName, (table) => {
+                    column.type.schema?.(table, column)
+                })
             }
         }
+
+        //     const def = column.default !== undefined ?
+        //         column.default.constructor?.name === 'Raw' ?
+        //             `DEFAULT ${column.default.value}` :
+        //             `DEFAULT '${column.default}'` :
+        //         ``;
+        //     if (!fields.includes(column.name)) {
+        //         const add = `ALTER TABLE ${this.tableName}
+        //         ADD 
+        //         ${column.name} 
+        //         ${column.type.toSQL()} 
+        //         ${def}`
+        //         await Makeit.pool.query(add)
+        //         logger.debug("MYSQL: >   " + Colors.FgCyan + "CREATE ROW " + column.name)
+
+        //     }
+        //     else {
+        //         logger.debug("MYSQL: >   " + Colors.FgGreen + "OK " + column.name)
+        //     }
+        //     if (column.type.extra) {
+        //         foreignKeys.push(
+        //             async () => await column.type.extra(this.tableName, column)
+        //         )
+        //     }
+        // }
+        
         return foreignKeys
     }
 
@@ -84,20 +104,20 @@ export class Model<T> {
         // const fields = results.map((row: any) => row.Field)
 
         for (let column of this.columns) {
-            if(column.type.relation === "belongsToMany") {
+            if (column.type.relation === "belongsToMany") {
                 const otherSide = Makeit.tables.find((Table) => Table.tableName === column.type.tableName)
                 const otherSideColumn = otherSide.columns.find(
                     (otherColumn: any) => otherColumn.name === column.type.otherSideColumn
                 )
-                if(!otherSideColumn) 
+                if (!otherSideColumn)
                     logger.error('Unable to find the belongsToMany field linked to ' + this.tableName + '.' +
-                    column.name + ' in table ' + otherSide.tableName)
+                        column.name + ' in table ' + otherSide.tableName)
                 // logger.debug('MYSQL > Retrieve other side column for ' + column.name + " " + column.type.column)
                 // logger.debug('MYSQL > Retrieve class ' + column.name)
                 const name = [this.tableName + "_" + column.name, otherSide.tableName + "_" + otherSideColumn.name]
-                .sort((a, b) =>  a.localeCompare(b)).join('_')
+                    .sort((a, b) => a.localeCompare(b)).join('_')
                 let through = undefined
-                if(column.type.throughOptions.through)
+                if (column.type.throughOptions.through)
                     through = Makeit.tables.find((Table) => Table.tableName == column.type.throughOptions.through.toLowerCase())
                 column.type.through = through
                 //logger.debug('MYSQL > Define name for pivot table')
@@ -120,9 +140,9 @@ export class Model<T> {
                 const otherFieldName = otherSideColumn.type.tableName + "Id"
                 column.type.throughTableField = fieldName;
                 column.type.throughTableOtherField = otherFieldName
-                let [fields] = await Makeit.pool.query( `DESCRIBE ${column.type.throughTable}`)
+                let [fields] = await Makeit.pool.query(`DESCRIBE ${column.type.throughTable}`)
                 fields = fields.map((row: any) => row.Field)
-                if(!fields.includes(fieldName)) {
+                if (!fields.includes(fieldName)) {
                     // logger.debug('MYSQL > Alter new column for ' +  name)
                     const add = `ALTER TABLE ${column.type.throughTable}
                     ADD ${fieldName} 
@@ -136,7 +156,7 @@ export class Model<T> {
                     ALTER TABLE ${column.type.throughTable}
                     DROP FOREIGN KEY ${fk_name};
                     `)
-                } catch(err) {}
+                } catch (err) { }
                 await Makeit.pool.query(`
                 ALTER TABLE ${column.type.throughTable}
                 ADD CONSTRAINT ${fk_name}
@@ -145,22 +165,22 @@ export class Model<T> {
                 `)
                 //ON DELETE {RESTRICT | NO ACTION | SET NULL | CASCADE};  
                 logger.debug("MYSQL: >   " + Colors.FgBlue + "CREATE FOREIGN KEY " + column.name)
-                
-                if(fields.includes('dummy')) {
+
+                if (fields.includes('dummy')) {
                     await Makeit.pool.query(`
                     ALTER TABLE ${column.type.throughTable} DROP COLUMN dummy
                     `)
                 }
 
-                if(fields.includes(otherFieldName)) {
+                if (fields.includes(otherFieldName)) {
                     let [pkeys] = await Makeit.pool.query(`SHOW KEYS FROM ${column.type.throughTable} WHERE Key_name = 'PRIMARY'`)
                     pkeys = pkeys.map((pkey: any) => pkey.Column_name)
-                    if(column.type.throughOptions.uniqueLink && pkeys.length > 0 &&
-                    !pkeys.includes(fieldName) && !pkeys.includes(otherFieldName)) {
+                    if (column.type.throughOptions.uniqueLink && pkeys.length > 0 &&
+                        !pkeys.includes(fieldName) && !pkeys.includes(otherFieldName)) {
                         await Makeit.pool.query(`
                         ALTER TABLE ${column.type.throughTable} DROP COLUMN id`)
                     }
-                    if(!pkeys.includes(fieldName) && !pkeys.includes(otherFieldName)) {
+                    if (!pkeys.includes(fieldName) && !pkeys.includes(otherFieldName)) {
                         //Let this to make a composite key
                         await Makeit.pool.query(`
                         ALTER TABLE ${column.type.throughTable} ADD PRIMARY KEY(${fieldName}, ${otherFieldName});`)
@@ -177,15 +197,16 @@ export class Model<T> {
     }
 
     async create(modelValue: Partial<Omit<T, keyof Model<any>>>) {
-        let clone : any = {}
-        for(let [index, value] of Object.entries(modelValue)) {
+        console.log("creating...")
+        let clone: any = {}
+        for (let [index, value] of Object.entries(modelValue)) {
             clone[index] = value
         }
         Object.setPrototypeOf(clone, Object.getPrototypeOf(this))
         const errors = await validate(clone)
-        if(errors?.length && errors?.length !== 0) {
+        if (errors?.length && errors?.length !== 0) {
             return errors.map((value) => Object.values(value.constraints || {}))
-            .reduce((acc, item) => [...acc, ...item], [])
+                .reduce((acc, item) => [...acc, ...item], [])
         }
         const req = `INSERT INTO ${this.tableName}(${Object.keys(modelValue).join(', ')})
         VALUES(${Object.keys(modelValue).map(() => "?").join(', ')})
@@ -195,15 +216,15 @@ export class Model<T> {
     }
 
     async update(modelValue: Partial<Omit<T, keyof Model<any>>>) {
-        let clone : any = {}
-        for(let [index, value] of Object.entries(modelValue)) {
+        let clone: any = {}
+        for (let [index, value] of Object.entries(modelValue)) {
             clone[index] = value
         }
         Object.setPrototypeOf(clone, Object.getPrototypeOf(this))
         const errors = await validate(clone)
-        if(errors?.length && errors?.length !== 0) {
+        if (errors?.length && errors?.length !== 0) {
             return errors.map((value) => Object.values(value.constraints || {}))
-            .reduce((acc, item) => [...acc, ...item], [])
+                .reduce((acc, item) => [...acc, ...item], [])
         }
         const req = `UPDATE ${this.tableName} SET (${Object.keys(modelValue).join(', ')})
         VALUES(${Object.keys(modelValue).map(() => "?").join(', ')})
@@ -219,7 +240,7 @@ export class Model<T> {
         let [columns, joins] = this.columnList?.(options)
 
         const items = this.columnListSql?.(columns)
-        const req =`
+        const req = `
         SELECT ${items} FROM ${this.tableName} ${this.tableName}
         ${joins.join(' ')}
         ${options.where ? 'WHERE ' + options.where : ''}
@@ -235,12 +256,13 @@ export class Model<T> {
 
         const items = this.columnListSql(columns)
 
-        const req =`
+        const req = `
         SELECT ${items} FROM ${this.tableName} ${this.tableName}
         ${joins.join(' ')}
         ${options.where ? 'WHERE ' + options.where : ''}
         ${options.orderBy ? 'ORDER BY ' + options.orderBy : ''}
         LIMIT 1`
+        console.log(req)
         let [results] = await Makeit.pool.query(req)
 
         return objectify(results[0], null)
@@ -248,7 +270,7 @@ export class Model<T> {
     }
 
     static async delete(options: { where: string }) {
-        const req =`
+        const req = `
         DELETE FROM ${this.tableName}
         ${options.where ? 'WHERE ' + options.where : ''}`
         let [results] = await Makeit.pool.query(req)
@@ -259,8 +281,8 @@ export class Model<T> {
 
     columnListSql(columns: any) {
         return columns.reduce((acc: any, item: any) => {
-            if(item.literal) return [...acc, item.literal]
-            if(item.type?.noColumn) return acc
+            if (item.literal) return [...acc, item.literal]
+            if (item.type?.noColumn) return acc
             return [...acc,
             `${item.table}.${item.name} '${item.alias || item.table}.${item.name}'`]
         }, []).join(', ')
@@ -270,13 +292,13 @@ export class Model<T> {
         let columns: any[] = []
         let joins: any[] = []
         for (let column of this.columns || []) {
-            if((column.select !== false || 
-            options.select?.includes('+' + column.name)) &&
-            !options.select?.includes('-' + column.name)) {
-                    columns.push({ ...column, table: this.tableName })
+            if ((column.select !== false ||
+                options.select?.includes('+' + column.name)) &&
+                !options.select?.includes('-' + column.name)) {
+                columns.push({ ...column, table: this.tableName })
             }
             if (options.include.find((inc: IInclude) => inc.name === column.name) || column.type.autoInclude) {
-                switch(column.type.relation) {
+                switch (column.type.relation) {
                     case 'belongsTo': this.belongsTo?.(column, columns, joins); break;
                     case 'belongsToMany': this.belongsToMany?.(column, columns, joins); break;
                     case 'hasOne': this.hasOne?.(column, columns, joins); break;
@@ -295,7 +317,7 @@ export class Model<T> {
 
         joins.push(`LEFT JOIN ${table.tableName} ${alias || table.tableName} ON ${on}`)
         for (let sub of table.columns) {
-            if(!sub.type.noColumn)
+            if (!sub.type.noColumn)
                 columns.push({ ...sub, table: table.tableName + '_' + (joins.length - 1), alias: this.tableName + '.' + column.name })
         }
     }
@@ -309,18 +331,20 @@ export class Model<T> {
 
         const table = Makeit.tables.find((Table) => Table.tableName === column.type.tableName)
         for (let sub of table.columns) {
-            if(!sub.type.noColumn)
+            if (!sub.type.noColumn)
                 columns.push({ ...sub, table: alias, alias: this.tableName + '.' + column.name })
         }
     }
 
     hasMany(column: any, columns: any[], joins: any[]) {
-        columns.push({ literal: `(SELECT JSON_ARRAYAGG(${column.type.column}) FROM ${column.type.tableName} 
-        WHERE ${column.type.otherSideColumn} = ${this.tableName}.${column.type.column}) as '${this.tableName}.${column.name}'`})
+        columns.push({
+            literal: `(SELECT JSON_ARRAYAGG(${column.type.column}) FROM ${column.type.tableName} 
+        WHERE ${column.type.otherSideColumn} = ${this.tableName}.${column.type.column}) as '${this.tableName}.${column.name}'`
+        })
     }
 
     belongsToMany(column: any, columns: any[], joins: any[]) {
-        columns.push({ 
+        columns.push({
             literal: `
             (SELECT JSON_ARRAYAGG(${column.type.throughTableOtherField}) 
             FROM ${column.type.throughTable} 

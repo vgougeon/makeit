@@ -8,8 +8,8 @@ export class ModelTimestamps<T> extends Model<T> {
     constructor() {
         super()
         const timestamps = [
-            { name: 'createdAt', type: new MakeitType.Date(), default: new Raw('NOW()') },
-            { name: 'updatedAt', type: new MakeitType.Date(), default: new Raw('NOW()') }
+            { name: 'createdAt', type: new MakeitType.Date(), default: 'NOW()' },
+            { name: 'updatedAt', type: new MakeitType.Date(), default: 'NOW()' }
         ]
         this.columns = [...(this.columns || []), ...timestamps]
     }

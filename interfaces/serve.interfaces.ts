@@ -3,5 +3,5 @@ export interface ServeOptions {
     port?: string;
     database: string;
     username?: string;
-    password: string;
+    password?: string;
 }

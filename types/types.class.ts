@@ -1,6 +1,8 @@
+import knex, { Knex } from "knex";
 import { Makeit } from "..";
 import { Colors, logger } from "../classes/logger.class";
 import { Model } from "../classes/model.class";
+import { ColumnOptions } from "../interfaces/columnOptions.interface";
 import { Through } from "../interfaces/through.interface";
 
 namespace MakeitType {
@@ -13,15 +15,26 @@ namespace MakeitType {
         public toSQL() {
             return `VARCHAR(${this.maxLength})`
         }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            const t = table.string(column.name, this.maxLength)
+            if(column.default) t.defaultTo(column.default)
+            console.log(column.default)
+        }
     }
 
     export class Text {
-        maxLength: number;
         constructor() {
         }
 
         public toSQL() {
             return `TEXT`
+        }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            const t = table.text(column.name)
+            if(column.default) t.defaultTo(column.default)
+            
         }
     }
 
@@ -32,6 +45,11 @@ namespace MakeitType {
         public toSQL() {
             return `INTEGER`
         }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            const t = table.integer(column.name)
+            if(column.default) t.defaultTo(column.default)
+        }
     }
 
     export class Boolean {
@@ -40,6 +58,11 @@ namespace MakeitType {
 
         public toSQL() {
             return `TINYINT(1)`
+        }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            const t = table.boolean(column.name)
+            if(column.default) t.defaultTo(column.default)
         }
     }
 
@@ -52,6 +75,11 @@ namespace MakeitType {
         public toSQL() {
             return `VARCHAR(255)`
         }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            const t = table.string(column.name)
+            if(column.default) t.defaultTo(column.default)
+        }
     }
 
     export class Date {
@@ -60,6 +88,14 @@ namespace MakeitType {
 
         public toSQL() {
             return `DATETIME`
+        }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            if(column.default === 'NOW()') table.dateTime(column.name).defaultTo(Makeit.knex.raw('NOW()'))
+            else { 
+                const t = table.dateTime(column.name)
+                if(column.default) t.defaultTo(column.default)
+            }
         }
     }
 
@@ -77,6 +113,10 @@ namespace MakeitType {
 
         public toSQL() {
             return `INTEGER`
+        }
+
+        public schema(table: Knex.CreateTableBuilder, column: any) {
+            table.integer(column.name)
         }
 
         public async extra(table: any, column: any) {
