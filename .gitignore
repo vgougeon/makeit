@@ -1,2 +1,5 @@
 /node_modules
 tsconfig.json
+/web/node_modules
+/web/.next
+settings.json
